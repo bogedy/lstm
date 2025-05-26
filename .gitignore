@@ -172,3 +172,15 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+.DS_Store
+data/.DS_Store
+*.pdf
+part2/brackets/
+part2/even_start/
+part2/palindrome/
+part2/same_ends
+.gitignore
+part1/neg_examples
+part1/pos_examples
+part1/test.txt
+part1/train.txt
