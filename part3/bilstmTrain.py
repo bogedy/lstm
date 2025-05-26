@@ -379,9 +379,9 @@ def main():
     print(f"Using device: {device}")
     
     # Load data
-    # train_df = read_data(f"../data/{args.task}/train")
+    train_df = read_data(f"../data/{args.task}/train")
     #### TESTING
-    train_df = read_data(f"../data/{args.task}/train").iloc[:1]
+    # train_df = read_data(f"../data/{args.task}/train").iloc[:1]
     dev_df = read_data(f"../data/{args.task}/test")
     
     # Build vocabularies
@@ -436,7 +436,7 @@ def main():
             sentences_seen += batch['words'].size(0)
             
             # Evaluate every 500 sentences
-            if sentences_seen % 1 == 0:
+            if sentences_seen % 500 == 0:
                 print(f"last train batch loss: {loss.item():.4f}")
                 dev_acc = evaluate(model, dev_loader, device, tag2idx)
                 dev_accuracies.append((sentences_seen // 100, dev_acc))
