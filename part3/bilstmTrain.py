@@ -336,17 +336,21 @@ def evaluate(model, data_loader, device, tag2idx):
             for key, value in batch.items():
                 batch[key] = value.to(device)
             
+            # Forward pass
             logits = model(batch)
             targets = batch['tags'].view(-1)
             
-            # Ignore padding tokens
-            non_pad_mask = (targets != tag2idx['<PAD>'])
+            # Print first sequence's tags and predictions
             
+            # Mask calculations
+            non_pad_mask = (targets != tag2idx['<PAD>'])            
             if 'O' in tag2idx:  # NER task
                 o_idx = tag2idx['O']
-                eval_mask = non_pad_mask & ~((targets == o_idx) & (logits.argmax(dim=1) == o_idx))
+                o_mask = (targets == o_idx) & logits.argmax(dim=1) == o_idx
+                eval_mask = non_pad_mask & ~o_mask
             else:  # POS task
                 eval_mask = non_pad_mask
+                
             
             active_logits = logits[eval_mask]
             active_targets = targets[eval_mask]
@@ -355,7 +359,9 @@ def evaluate(model, data_loader, device, tag2idx):
                 predictions = active_logits.argmax(dim=1)
                 total_correct += (predictions == active_targets).sum().item()
                 total_samples += len(active_targets)
-    
+            else:
+                print("WARNING: No active targets in this batch")
+                
     return total_correct / total_samples if total_samples > 0 else 0.0
 
 def main():
@@ -382,7 +388,7 @@ def main():
     train_df = read_data(f"../data/{args.task}/train")
     #### TESTING
     # train_df = read_data(f"../data/{args.task}/train").iloc[:1]
-    dev_df = read_data(f"../data/{args.task}/test")
+    dev_df = read_data(f"../data/{args.task}/dev")
     
     # Build vocabularies
     word2idx, char2idx, tag2idx, prefix2idx, suffix2idx = build_vocabs(train_df)
@@ -435,8 +441,8 @@ def main():
             
             sentences_seen += batch['words'].size(0)
             
-            # Evaluate every 500 sentences
-            if sentences_seen % 500 == 0:
+            # Evaluate every 512 sentences
+            if sentences_seen % 512 == 0:
                 print(f"last train batch loss: {loss.item():.4f}")
                 dev_acc = evaluate(model, dev_loader, device, tag2idx)
                 dev_accuracies.append((sentences_seen // 100, dev_acc))
