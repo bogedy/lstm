@@ -7,7 +7,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
-from tqdm import tqdm
 
 class LSTMCell(nn.Module):
     def __init__(self, input_size, hidden_size):
@@ -75,6 +74,7 @@ class BiLSTMTagger(nn.Module):
         self.repr_type = config['repr_type']
         self.hidden_dim = config['hidden_dim']
         self.embedding_dim = config['embedding_dim']
+        self.dropout = nn.Dropout(0.5)
         
         # word embeddings for reprs a, c, d
         if self.repr_type in ['a', 'c', 'd']:
@@ -151,6 +151,8 @@ class BiLSTMTagger(nn.Module):
             combined = torch.cat([word_embeds, char_repr], dim=2)
             embeds = self.combine_linear(combined)
 
+        embeds = self.dropout(embeds)
+
         # First BiLSTM layer - Forward pass
         outputs_fwd1, _, _ = self.bilstm_layer1_fwd.process_sequence(embeds)
         
@@ -161,6 +163,7 @@ class BiLSTMTagger(nn.Module):
         
         # Concatenate forward and backward outputs
         layer1_output = torch.stack([torch.cat([hf, hb], dim=1) for hf, hb in zip(outputs_fwd1, outputs_bwd1)], dim=1)
+        layer1_output = self.dropout(layer1_output)
 
         # Second BiLSTM layer - Forward pass
         outputs_fwd2, _, _ = self.bilstm_layer2_fwd.process_sequence(layer1_output)
@@ -172,7 +175,8 @@ class BiLSTMTagger(nn.Module):
 
         # Concatenate forward and backward outputs
         layer2_output = torch.stack([torch.cat([hf, hb], dim=1) for hf, hb in zip(outputs_fwd2, outputs_bwd2)], dim=1)
-        
+        layer2_output = self.dropout(layer2_output)
+
         # Output projection
         logits = self.hidden2tag(layer2_output.reshape(-1, 2 * self.hidden_dim))
         return logits
@@ -369,8 +373,8 @@ def main():
     parser.add_argument('repr', choices=['a', 'b', 'c', 'd'], help='Representation type')
     parser.add_argument('--task', choices=['pos', 'ner'], default='pos', help='Task type (default: %(default)s)')
     parser.add_argument('--embedding_dim', type=int, default=50, help='Embedding dimension (default: %(default)s)')
-    parser.add_argument('--char_embedding_dim', type=int, default=25, help='Character embedding dimension (default: %(default)s)')
-    parser.add_argument('--char_hidden_dim', type=int, default=25, help='Character hidden dimension (default: %(default)s)')
+    parser.add_argument('--char_embedding_dim', type=int, default=32, help='Character embedding dimension (default: %(default)s)')
+    parser.add_argument('--char_hidden_dim', type=int, default=64, help='Character hidden dimension (default: %(default)s)')
     parser.add_argument('--hidden_dim', type=int, default=128, help='Hidden dimension (default: %(default)s)')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size (default: %(default)s)')
     parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate (default: %(default)s)')
@@ -427,9 +431,10 @@ def main():
     if args.debug:
         num_epochs = 51200
     for epoch in range(num_epochs):
+        print(f"Epoch: {epoch}")
         model.train()
         
-        for batch_idx, batch in tqdm(enumerate(train_loader), desc=f"Epoch {epoch+1}"):
+        for batch_idx, batch in enumerate(train_loader):
             optimizer.zero_grad()
             
             for key, value in batch.items():
@@ -440,14 +445,15 @@ def main():
             loss = criterion(logits, targets)
             
             loss.backward()
+            nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
             optimizer.step()
             
             sentences_seen += batch['words'].size(0)
             
-            # Evaluate every 512 sentences
-            iter_freq = int(512 / batch['words'].size(0))
+            # evaluate every 500 sentences
+            iter_freq = int(500 / batch['words'].size(0))
             if iter_freq==0 or batch_idx % iter_freq == 0:
-                print(f"last train batch loss: {loss.item():.4f}")
+                print(f"Train batch loss: {loss.item():.4f}")
                 if not args.debug:
                     dev_acc = evaluate(model, dev_loader, device, tag2idx)
                     dev_accuracies.append((sentences_seen // 100, dev_acc))
