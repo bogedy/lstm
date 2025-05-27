@@ -78,15 +78,15 @@ class BiLSTMTagger(nn.Module):
         
         # word embeddings for reprs a, c, d
         if self.repr_type in ['a', 'c', 'd']:
-            self.word_embeddings = nn.Embedding(config['vocab_size'], self.embedding_dim)
+            self.word_embeddings = nn.Embedding(config['vocab_size'], self.embedding_dim, padding_idx=0)
         # character lstm for reprs b, d
         if self.repr_type in ['b', 'd']:
-            self.char_embeddings = nn.Embedding(config['char_vocab_size'], config['char_embedding_dim'])
+            self.char_embeddings = nn.Embedding(config['char_vocab_size'], config['char_embedding_dim'], padding_idx=0)
             self.char_lstm = LSTMCell(config['char_embedding_dim'], config['char_hidden_dim'])
         # subword embeddings for repr c
         if self.repr_type == 'c':
-            self.prefix_embeddings = nn.Embedding(config['prefix_vocab_size'], self.embedding_dim)
-            self.suffix_embeddings = nn.Embedding(config['suffix_vocab_size'], self.embedding_dim)
+            self.prefix_embeddings = nn.Embedding(config['prefix_vocab_size'], self.embedding_dim, padding_idx=0)
+            self.suffix_embeddings = nn.Embedding(config['suffix_vocab_size'], self.embedding_dim, padding_idx=0)
         
         # set input dim correctly and initalize the linear layer for d
         if self.repr_type in ['a', 'c']:
@@ -375,7 +375,8 @@ def main():
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size (default: %(default)s)')
     parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate (default: %(default)s)')
     parser.add_argument('--num_epochs', type=int, default=5, help='Number of epochs (default: %(default)s)')
-    
+    parser.add_argument('--debug', action='store_true', help='Flag to overfit on one example for debugging (default: False)')
+
     args = parser.parse_args()
     
     # Generate model filename automatically
@@ -386,8 +387,8 @@ def main():
     
     # Load data
     train_df = read_data(f"../data/{args.task}/train")
-    #### TESTING
-    # train_df = read_data(f"../data/{args.task}/train").iloc[:1]
+    if args.debug:
+        train_df = read_data(f"../data/{args.task}/train").iloc[:1]
     dev_df = read_data(f"../data/{args.task}/dev")
     # Build vocabularies
     word2idx, char2idx, tag2idx, prefix2idx, suffix2idx = build_vocabs(train_df)
@@ -396,7 +397,7 @@ def main():
     train_dataset = SequenceDataset(train_df, word2idx, char2idx, tag2idx, prefix2idx, suffix2idx, args.repr)
     dev_dataset = SequenceDataset(dev_df, word2idx, char2idx, tag2idx, prefix2idx, suffix2idx, args.repr)
     
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
+    train_loader = DataLoader(train_dataset, batch_size=1 if args.debug else args.batch_size, shuffle=True, collate_fn=collate_fn)
     dev_loader = DataLoader(dev_dataset, batch_size=args.batch_size, collate_fn=collate_fn)
     
     # Create model
@@ -422,7 +423,10 @@ def main():
     dev_accuracies = []
     sentences_seen = 0
     
-    for epoch in range(args.num_epochs):
+    num_epochs = args.num_epochs
+    if args.debug:
+        num_epochs = 51200
+    for epoch in range(num_epochs):
         model.train()
         
         for batch_idx, batch in tqdm(enumerate(train_loader), desc=f"Epoch {epoch+1}"):
@@ -444,21 +448,22 @@ def main():
             iter_freq = int(512 / batch['words'].size(0))
             if iter_freq==0 or batch_idx % iter_freq == 0:
                 print(f"last train batch loss: {loss.item():.4f}")
-                dev_acc = evaluate(model, dev_loader, device, tag2idx)
-                dev_accuracies.append((sentences_seen // 100, dev_acc))
-                print(f"Sentences: {sentences_seen}, Dev Acc: {dev_acc:.4f}")
-                
-                if dev_acc > best_dev_acc:
-                    best_dev_acc = dev_acc
-                    torch.save({
-                        'model_state_dict': model.state_dict(),
-                        'config': config,
-                        'word2idx': word2idx,
-                        'char2idx': char2idx,
-                        'tag2idx': tag2idx,
-                        'prefix2idx': prefix2idx,
-                        'suffix2idx': suffix2idx
-                    }, model_file)
+                if not args.debug:
+                    dev_acc = evaluate(model, dev_loader, device, tag2idx)
+                    dev_accuracies.append((sentences_seen // 100, dev_acc))
+                    print(f"Sentences: {sentences_seen}, Dev Acc: {dev_acc:.4f}")
+                    
+                    if dev_acc > best_dev_acc:
+                        best_dev_acc = dev_acc
+                        torch.save({
+                            'model_state_dict': model.state_dict(),
+                            'config': config,
+                            'word2idx': word2idx,
+                            'char2idx': char2idx,
+                            'tag2idx': tag2idx,
+                            'prefix2idx': prefix2idx,
+                            'suffix2idx': suffix2idx
+                        }, model_file)
                 
                 model.train()
     
