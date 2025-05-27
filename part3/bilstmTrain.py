@@ -426,7 +426,7 @@ def main():
     for epoch in range(args.num_epochs):
         model.train()
         
-        for batch in tqdm(train_loader, desc=f"Epoch {epoch+1}"):
+        for batch_idx, batch in tqdm(enumerate(train_loader), desc=f"Epoch {epoch+1}"):
             optimizer.zero_grad()
             
             for key, value in batch.items():
@@ -442,7 +442,8 @@ def main():
             sentences_seen += batch['words'].size(0)
             
             # Evaluate every 512 sentences
-            if sentences_seen % 512 == 0:
+            iter_freq = int(512 / batch['words'].size(0))
+            if iter_freq==0 or batch_idx % iter_freq == 0:
                 print(f"last train batch loss: {loss.item():.4f}")
                 dev_acc = evaluate(model, dev_loader, device, tag2idx)
                 dev_accuracies.append((sentences_seen // 100, dev_acc))
