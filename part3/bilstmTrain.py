@@ -206,10 +206,10 @@ def read_data(file_path):
 
 def build_vocabs(train_df):
     word_counts = defaultdict(int)
-    char_set = set(['<PAD>', '<UNK>'])
-    tag_set = set(['<PAD>'])
-    prefix_set = set(['<PAD>', '<UNK>'])
-    suffix_set = set(['<PAD>', '<UNK>'])
+    char_set = set()
+    tag_set = set()
+    prefix_set = set()
+    suffix_set = set()
     
     for _, row in train_df.iterrows():
         for word in row['words']:
@@ -224,10 +224,10 @@ def build_vocabs(train_df):
     
     # build vocabs
     words = ['<PAD>', '<UNK>'] + [w for w, _ in word_counts.items()]
-    chars = list(char_set)
-    tags = list(tag_set)
-    prefixes = list(prefix_set)
-    suffixes = list(suffix_set)
+    chars = ['<PAD>', '<UNK>'] + list(char_set)
+    tags = ['<PAD>'] + list(tag_set)
+    prefixes = ['<PAD>', '<UNK>'] + list(prefix_set)
+    suffixes = ['<PAD>', '<UNK>'] + list(suffix_set)
     
     word2idx = {w: i for i, w in enumerate(words)}
     char2idx = {c: i for i, c in enumerate(chars)}
@@ -389,7 +389,6 @@ def main():
     #### TESTING
     # train_df = read_data(f"../data/{args.task}/train").iloc[:1]
     dev_df = read_data(f"../data/{args.task}/dev")
-    
     # Build vocabularies
     word2idx, char2idx, tag2idx, prefix2idx, suffix2idx = build_vocabs(train_df)
     
