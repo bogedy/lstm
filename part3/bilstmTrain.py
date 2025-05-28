@@ -379,8 +379,9 @@ def main():
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size (default: %(default)s)')
     parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate (default: %(default)s)')
     parser.add_argument('--num_epochs', type=int, default=5, help='Number of epochs (default: %(default)s)')
-    parser.add_argument('--grad_clip_norm', type=float, default=0.5, help='Gradient clipping max norm (default: %(default)s)')
+    parser.add_argument('--grad_clip_norm', type=float, default=1.0, help='Gradient clipping max norm (default: %(default)s)')
     parser.add_argument('--debug', action='store_true', help='Flag to overfit on one example for debugging (default: False)')
+    parser.add_argument('--scheduler', action='store_true', help='Use a learning rate scheduler to halve the lr when dev accuracy plateaus (default: False)')
     parser.add_argument('--eval_freq', type=int, default=500, help='How often to eval (number of sentences) (default: %(default)s)')
 
 
@@ -423,7 +424,8 @@ def main():
     
     model = BiLSTMTagger(config).to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', patience=0, factor=0.5)
+    if args.scheduler:
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', patience=0, factor=0.5)
     criterion = nn.CrossEntropyLoss(ignore_index=tag2idx['<PAD>'])
     
     # Training loop
@@ -460,7 +462,8 @@ def main():
                 print(f"{batch_idx:0{len(str(len(train_loader)))}d}/{len(train_loader)}: train batch loss {loss.item():.4f}")
                 if not args.debug:
                     dev_acc = evaluate(model, dev_loader, device, tag2idx)
-                    scheduler.step(dev_acc)
+                    if args.scheduler:
+                        scheduler.step(dev_acc)
                     dev_accuracies.append((sentences_seen // 100, dev_acc))
                     print(f"Sentences: {sentences_seen}, Dev Acc: {dev_acc:.4f}")
                     
