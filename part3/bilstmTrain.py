@@ -385,6 +385,7 @@ def main():
     parser.add_argument('--debug', action='store_true', help='Flag to overfit on one example for debugging (default: False)')
     parser.add_argument('--scheduler', action='store_true', help='Use a learning rate scheduler to halve the lr when dev accuracy plateaus (default: False)')
     parser.add_argument('--eval_freq', type=int, default=500, help='How often to eval (number of sentences) (default: %(default)s)')
+    parser.add_argument('--force_cpu', action='store_true', help='Force CPU even when cuda is available (default: False)')
 
 
     args = parser.parse_args()
@@ -393,6 +394,8 @@ def main():
     model_file = f"blstm_{args.repr}_{args.task}_{args.embedding_dim}_{args.hidden_dim}.pt"
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if args.force_cpu:
+        device = torch.device('cpu')
     print(f"Using device: {device}")
     
     # Load data
