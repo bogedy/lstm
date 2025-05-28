@@ -483,7 +483,7 @@ def main():
                         }, model_file)
                 
                 model.train()
-        print(f"ellapsed time: {time.time() - start_time:f.02}")
+        print(f"ellapsed time: {time.time() - start_time:.2f}")
     
     # Save learning curve
     curve_file = model_file.replace('.pt', f'.{args.task}.{args.repr}.curve.json')
