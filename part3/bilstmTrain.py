@@ -381,6 +381,8 @@ def main():
     parser.add_argument('--num_epochs', type=int, default=5, help='Number of epochs (default: %(default)s)')
     parser.add_argument('--grad_clip_norm', type=float, default=0.5, help='Gradient clipping max norm (default: %(default)s)')
     parser.add_argument('--debug', action='store_true', help='Flag to overfit on one example for debugging (default: False)')
+    parser.add_argument('--eval_freq', type=int, default=500, help='How often to eval (number of sentences) (default: %(default)s)')
+
 
     args = parser.parse_args()
     
@@ -453,9 +455,9 @@ def main():
             sentences_seen += batch['words'].size(0)
             
             # evaluate every 500 sentences
-            iter_freq = int(500 / batch['words'].size(0))
+            iter_freq = int(args.eval_freq / batch['words'].size(0))
             if iter_freq==0 or batch_idx % iter_freq == 0:
-                print(f"Train batch loss: {loss.item():.4f}")
+                print(f"{batch_idx:0{len(str(len(train_loader)))}d}/{len(train_loader)}: train batch loss {loss.item():.4f}")
                 if not args.debug:
                     dev_acc = evaluate(model, dev_loader, device, tag2idx)
                     scheduler.step(dev_acc)
