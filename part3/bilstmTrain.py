@@ -379,6 +379,7 @@ def main():
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size (default: %(default)s)')
     parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate (default: %(default)s)')
     parser.add_argument('--num_epochs', type=int, default=5, help='Number of epochs (default: %(default)s)')
+    parser.add_argument('--grad_clip_norm', type=float, default=0.5, help='Gradient clipping max norm (default: %(default)s)')
     parser.add_argument('--debug', action='store_true', help='Flag to overfit on one example for debugging (default: False)')
 
     args = parser.parse_args()
@@ -420,6 +421,7 @@ def main():
     
     model = BiLSTMTagger(config).to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', patience=2, factor=0.5)
     criterion = nn.CrossEntropyLoss(ignore_index=tag2idx['<PAD>'])
     
     # Training loop
@@ -445,7 +447,7 @@ def main():
             loss = criterion(logits, targets)
             
             loss.backward()
-            nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
+            nn.utils.clip_grad_norm_(model.parameters(), max_norm=args.grad_clip_norm)
             optimizer.step()
             
             sentences_seen += batch['words'].size(0)
@@ -456,6 +458,7 @@ def main():
                 print(f"Train batch loss: {loss.item():.4f}")
                 if not args.debug:
                     dev_acc = evaluate(model, dev_loader, device, tag2idx)
+                    scheduler.step(dev_acc)
                     dev_accuracies.append((sentences_seen // 100, dev_acc))
                     print(f"Sentences: {sentences_seen}, Dev Acc: {dev_acc:.4f}")
                     
