@@ -421,7 +421,7 @@ def main():
     
     model = BiLSTMTagger(config).to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', patience=2, factor=0.5)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', patience=0, factor=0.5)
     criterion = nn.CrossEntropyLoss(ignore_index=tag2idx['<PAD>'])
     
     # Training loop
