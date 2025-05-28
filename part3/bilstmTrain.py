@@ -8,6 +8,8 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 
+import time
+
 class LSTMCell(nn.Module):
     def __init__(self, input_size, hidden_size):
         super().__init__()
@@ -437,6 +439,7 @@ def main():
     if args.debug:
         num_epochs = 51200
     for epoch in range(num_epochs):
+        start_time = time.time()
         print(f"Epoch: {epoch}")
         model.train()
         
@@ -480,6 +483,7 @@ def main():
                         }, model_file)
                 
                 model.train()
+        print(f"ellapsed time: {time.time() - start_time:f.02}")
     
     # Save learning curve
     curve_file = model_file.replace('.pt', f'.{args.task}.{args.repr}.curve.json')
