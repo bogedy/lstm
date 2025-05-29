@@ -99,11 +99,10 @@ def generate_and_save(language: str, num_pos: int, num_neg: int):
     pos_examples = [pos_gen() for _ in range(num_pos)]
     neg_examples = [neg_gen() for _ in range(num_neg)]
 
-    # Write raw examples
     write_examples(f"{dir_name}/pos_examples", pos_examples)
     write_examples(f"{dir_name}/neg_examples", neg_examples)
 
-    # Generate train/test sets
+    # gen train/test sets
     pos_examples = [ex + " 1" for ex in pos_examples]
     neg_examples = [ex + " 0" for ex in neg_examples]
     data = pos_examples + neg_examples

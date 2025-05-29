@@ -44,13 +44,13 @@ class LSTMCell(nn.Module):
         self.hidden_size = hidden_size
         concat_size = input_size + hidden_size
         
-        # Forget gate
+        # forget gate
         self.ff_f = nn.Linear(concat_size, hidden_size)
-        # Input gate
+        # input gate
         self.ff_i = nn.Linear(concat_size, hidden_size)
-        # Cell gate
+        # cell gate
         self.ff_c = nn.Linear(concat_size, hidden_size)
-        # Output gate
+        # output gate
         self.ff_o = nn.Linear(concat_size, hidden_size)
     
     def forward(self, x, cell_state, hidden):
@@ -95,7 +95,7 @@ class LSTMClassifier(nn.Module):
             )
             hidden_outputs.append(h)
         
-        # Get last hidden state before padding
+        # get last hidden state before padding
         last_hidden = torch.zeros(batch_size, self.hidden_size)
         for i in range(batch_size):
             last_hidden[i] = hidden_outputs[lengths[i]][i]
@@ -104,14 +104,12 @@ class LSTMClassifier(nn.Module):
         return out
 
 def train(lang):
-    # Hyperparameters
     input_size = 32
     hidden_size = 32
     batch_size = 32
     num_epochs = 5
     learning_rate = 0.01
     
-    # Load data
     train_dataset = TextDataset(f'{lang}/train.txt')
     test_dataset = TextDataset(f'{lang}/test.txt')
     vocab_size = len(train_dataset.vocabulary) # seems impossible for the test set to have an out of vocabulary character.
@@ -127,7 +125,7 @@ def train(lang):
     criterion = nn.BCELoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     
-    # Training loop
+    # begin training loop
     for epoch in range(num_epochs):
         print(f"epoch {epoch}:")
         model.train()
@@ -142,7 +140,7 @@ def train(lang):
             optimizer.step()
         print("end of epoch loss:", loss.item())
         
-        # Validation
+        # val
         model.eval()
         correct = 0
         total = 0
