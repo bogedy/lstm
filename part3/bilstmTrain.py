@@ -33,17 +33,7 @@ class LSTMCell(nn.Module):
     
     def process_sequence(self, sequence):
         """
-        Process a sequence through the LSTM.
-        
-        Args:
-            sequence: (batch_size, seq_len, input_size) or (seq_len, input_size)
-            initial_hidden: (batch_size, hidden_size) initial hidden state
-            initial_cell: (batch_size, hidden_size) initial cell state
-            
-        Returns:
-            outputs: list of hidden states for each timestep
-            final_hidden: final hidden state
-            final_cell: final cell state
+        process a whole sequence and get back the final hidden
         """
         if sequence.dim() == 2:
             # add batch dimension if not present, useful when testing on overfitting on one sample.
@@ -115,24 +105,22 @@ class BiLSTMTagger(nn.Module):
         char_embeds = self.char_embeddings(char_flat)  # (batch_size * seq_len, max_word_len, char_embedding_dim)
         
         # get lengths for each word before padding
+        # so that we can find the correct hidden output later
         actual_lengths = (char_flat != 0).sum(dim=1)  # (batch_size * seq_len,)
         
-        # Process all sequences together using the vectorized process_sequence
-        # The process_sequence method already handles batched input
         _, final_hiddens, _ = self.char_lstm.process_sequence(char_embeds)  # final_hiddens: (batch_size * seq_len, char_hidden_dim)
         
-        # Handle empty words by zeroing out representations where actual_lengths == 0
+        # handle empty words
         empty_word_mask = (actual_lengths == 0)
         final_hiddens[empty_word_mask] = 0
         
-        # Reshape back to (batch_size, seq_len, char_hidden_dim)
+        # reshape back (batch_size, seq_len, char_hidden_dim)
         char_repr = final_hiddens.view(batch_size, seq_len, -1)
         return char_repr
 
     def forward(self, batch):
         word_indices = batch['words']
 
-        # Get word representations based on repr_type
         if self.repr_type == 'a':
             embeds = self.word_embeddings(word_indices)
         
@@ -155,31 +143,27 @@ class BiLSTMTagger(nn.Module):
 
         embeds = self.dropout(embeds)
 
-        # First BiLSTM layer - Forward pass
+        # first Bilstm layer
         outputs_fwd1, _, _ = self.bilstm_layer1_fwd.process_sequence(embeds)
         
-        # First BiLSTM layer - Backward pass
         embeds_reversed = torch.flip(embeds, dims=[1])
         outputs_bwd1_rev, _, _ = self.bilstm_layer1_bwd.process_sequence(embeds_reversed)
         outputs_bwd1 = list(reversed(outputs_bwd1_rev)) # backwards outputs in the forwards order
         
-        # Concatenate forward and backward outputs
         layer1_output = torch.stack([torch.cat([hf, hb], dim=1) for hf, hb in zip(outputs_fwd1, outputs_bwd1)], dim=1)
         layer1_output = self.dropout(layer1_output)
 
-        # Second BiLSTM layer - Forward pass
+        # second bilstm layer
         outputs_fwd2, _, _ = self.bilstm_layer2_fwd.process_sequence(layer1_output)
         
-        # Second BiLSTM layer - Backward pass
         layer1_reversed = torch.flip(layer1_output, dims=[1])
         outputs_bwd2_rev, _, _ = self.bilstm_layer2_bwd.process_sequence(layer1_reversed)
         outputs_bwd2 = list(reversed(outputs_bwd2_rev))
 
-        # Concatenate forward and backward outputs
         layer2_output = torch.stack([torch.cat([hf, hb], dim=1) for hf, hb in zip(outputs_fwd2, outputs_bwd2)], dim=1)
         layer2_output = self.dropout(layer2_output)
 
-        # Output projection
+        # projection and output
         logits = self.hidden2tag(layer2_output.reshape(-1, 2 * self.hidden_dim))
         return logits
     
@@ -200,6 +184,9 @@ def read_data(file_path):
                     if word != "-DOCSTART-":
                         current_words.append(word.lower())
                         current_tags.append(tag)
+
+                if len(line.split()) == 1: # test
+                    current_words.append(word.lower())
             else:
                 if current_words:
                     data.append({'words': current_words, 'tags': current_tags})
@@ -370,6 +357,10 @@ def evaluate(model, data_loader, device, tag2idx):
                 
     return total_correct / total_samples if total_samples > 0 else 0.0
 
+##############
+# main / train
+##############
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('repr', choices=['a', 'b', 'c', 'd'], help='Representation type')
@@ -386,11 +377,13 @@ def main():
     parser.add_argument('--scheduler', action='store_true', help='Use a learning rate scheduler to halve the lr when dev accuracy plateaus (default: False)')
     parser.add_argument('--eval_freq', type=int, default=500, help='How often to eval (number of sentences) (default: %(default)s)')
     parser.add_argument('--force_cpu', action='store_true', help='Force CPU even when cuda is available (default: False)')
+    parser.add_argument('--grad_noise', type=float, default=0.0, 
+                       help='Amount of Gaussian noise to add to gradients (default: %(default)s)')
 
 
     args = parser.parse_args()
     
-    # Generate model filename automatically
+    # gen filename
     model_file = f"blstm_{args.repr}_{args.task}_{args.embedding_dim}_{args.hidden_dim}.pt"
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -398,22 +391,18 @@ def main():
         device = torch.device('cpu')
     print(f"Using device: {device}")
     
-    # Load data
     train_df = read_data(f"../data/{args.task}/train")
     if args.debug:
         train_df = read_data(f"../data/{args.task}/train").iloc[:1]
     dev_df = read_data(f"../data/{args.task}/dev")
-    # Build vocabularies
     word2idx, char2idx, tag2idx, prefix2idx, suffix2idx = build_vocabs(train_df)
     
-    # Create datasets
     train_dataset = SequenceDataset(train_df, word2idx, char2idx, tag2idx, prefix2idx, suffix2idx, args.repr)
     dev_dataset = SequenceDataset(dev_df, word2idx, char2idx, tag2idx, prefix2idx, suffix2idx, args.repr)
     
     train_loader = DataLoader(train_dataset, batch_size=1 if args.debug else args.batch_size, shuffle=True, collate_fn=collate_fn)
     dev_loader = DataLoader(dev_dataset, batch_size=args.batch_size, collate_fn=collate_fn)
     
-    # Create model
     config = {
         'repr_type': args.repr,
         'vocab_size': len(word2idx),
@@ -433,7 +422,7 @@ def main():
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', patience=0, factor=0.5)
     criterion = nn.CrossEntropyLoss(ignore_index=tag2idx['<PAD>'])
     
-    # Training loop
+    # training loop starts here
     best_dev_acc = 0
     dev_accuracies = []
     sentences_seen = 0
@@ -458,6 +447,11 @@ def main():
             
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), max_norm=args.grad_clip_norm)
+            if args.grad_noise > 0:
+                for param in model.parameters():
+                    if param.grad is not None:
+                        noise = torch.randn_like(param.grad) * args.grad_noise
+                        param.grad += noise
             optimizer.step()
             
             sentences_seen += batch['words'].size(0)
@@ -488,7 +482,7 @@ def main():
                 model.train()
         print(f"ellapsed time: {time.time() - start_time:.2f}")
     
-    # Save learning curve
+    # save learning curve
     curve_file = model_file.replace('.pt', f'.{args.task}.{args.repr}.curve.json')
     with open(curve_file, 'w') as f:
         json.dump(dev_accuracies, f)
