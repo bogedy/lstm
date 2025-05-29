@@ -377,8 +377,10 @@ def main():
     parser.add_argument('--scheduler', action='store_true', help='Use a learning rate scheduler to halve the lr when dev accuracy plateaus (default: False)')
     parser.add_argument('--eval_freq', type=int, default=500, help='How often to eval (number of sentences) (default: %(default)s)')
     parser.add_argument('--force_cpu', action='store_true', help='Force CPU even when cuda is available (default: False)')
-    parser.add_argument('--grad_noise', type=float, default=0.0, 
-                       help='Amount of Gaussian noise to add to gradients (default: %(default)s)')
+    parser.add_argument('--weight_noise', type=float, default=0.0, 
+                       help='Amount of Gaussian noise to add to weights (default: %(default)s)')
+    parser.add_argument('--label_smoothing', type=float, default=0.0, help='Amount of label smoothing to use in the loss (default: %(default)s)')
+    parser.add_argument('--weight_decay', type=float, default=0.0, help='Amount of weight decay to use with AdamW (default: %(default)s)')
 
 
     args = parser.parse_args()
@@ -417,10 +419,10 @@ def main():
     }
     
     model = BiLSTMTagger(config).to(device)
-    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
+    optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
     if args.scheduler:
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', patience=0, factor=0.5)
-    criterion = nn.CrossEntropyLoss(ignore_index=tag2idx['<PAD>'])
+    criterion = nn.CrossEntropyLoss(ignore_index=tag2idx['<PAD>'], label_smoothing=args.label_smoothing)
     
     # training loop starts here
     best_dev_acc = 0
@@ -445,13 +447,14 @@ def main():
             targets = batch['tags'].view(-1)
             loss = criterion(logits, targets)
             
+            if args.weight_noise > 0:
+                for param in model.parameters():
+                    if param is not None:
+                        noise = torch.randn_like(param.grad) * args.weight_noise
+                        param += noise
+
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), max_norm=args.grad_clip_norm)
-            if args.grad_noise > 0:
-                for param in model.parameters():
-                    if param.grad is not None:
-                        noise = torch.randn_like(param.grad) * args.grad_noise
-                        param.grad += noise
             optimizer.step()
             
             sentences_seen += batch['words'].size(0)
