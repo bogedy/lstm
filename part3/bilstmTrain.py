@@ -451,7 +451,7 @@ def main():
                 for param in model.parameters():
                     if param is not None:
                         noise = torch.randn_like(param) * args.weight_noise
-                        param += noise
+                        param.data.add_(noise)
 
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), max_norm=args.grad_clip_norm)
