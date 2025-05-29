@@ -450,7 +450,7 @@ def main():
             if args.weight_noise > 0:
                 for param in model.parameters():
                     if param is not None:
-                        noise = torch.randn_like(param.grad) * args.weight_noise
+                        noise = torch.randn_like(param) * args.weight_noise
                         param += noise
 
             loss.backward()
